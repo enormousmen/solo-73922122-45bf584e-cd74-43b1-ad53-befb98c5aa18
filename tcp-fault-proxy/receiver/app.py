@@ -61,13 +61,18 @@ async def handle_conn(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         }
         receipts.appendleft(receipt)
         payload = (json.dumps(receipt, ensure_ascii=False) + "\n").encode()
-        writer.write(payload)
-        await writer.drain()
-        if writer.transport.can_write_eof():
-            writer.write_eof()
-        # Give the peer a moment to read the receipt before full close.
-        await asyncio.sleep(0.05)
-    except (ConnectionError, asyncio.CancelledError, RuntimeError):
+        try:
+            writer.write(payload)
+            await writer.drain()
+            if writer.transport.can_write_eof():
+                writer.write_eof()
+            # Give the peer a moment to read the receipt before full close.
+            await asyncio.sleep(0.05)
+        except (ConnectionError, OSError, RuntimeError):
+            # The proxy may abort the connection mid-receipt (force-close).
+            # The receipt is already recorded; there is nobody left to read it.
+            pass
+    except (ConnectionError, OSError, asyncio.CancelledError, RuntimeError):
         pass
     finally:
         try:

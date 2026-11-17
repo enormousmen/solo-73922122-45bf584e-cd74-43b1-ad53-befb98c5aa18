@@ -10,29 +10,45 @@ services:
     ports:
       - "127.0.0.1:9100:9100"
       - "127.0.0.1:9101:9101"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   proxy:
     image: tcp-fault-proxy:latest
     build: .
     depends_on:
-      - receiver
+      receiver:
+        condition: service_healthy
     environment:
       SERVICE: proxy
       PROXY_HOST: 0.0.0.0
       PROXY_PORT: "9000"
+      PROXY_CONNECT_TIMEOUT: "5"
       TARGET_HOST: receiver
       TARGET_PORT: "9100"
     ports:
       # 9000: 故障转发 TCP 入口；8080: 控制 API / docs
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   sender:
     image: tcp-fault-proxy:latest
     build: .
     depends_on:
-      - proxy
-      - receiver
+      proxy:
+        condition: service_healthy
+      receiver:
+        condition: service_healthy
     environment:
       SERVICE: sender
       SENDER_TARGET_HOST: proxy
@@ -40,3 +56,9 @@ services:
     ports:
       # 发送器自己的控制 API / docs
       - "127.0.0.1:8081:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
